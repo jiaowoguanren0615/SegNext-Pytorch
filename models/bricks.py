@@ -4,6 +4,42 @@ from abc import abstractmethod
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.utils import _pair as to_2tuple
+
+
+class ConvModule(nn.Module):
+    def __init__(self, in_channels, out_channels, bias=False, num_groups=32):
+        super(ConvModule, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=bias)
+        self.gn = nn.GroupNorm(num_groups, out_channels) if num_groups != 0 else nn.Identity()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.gn(x)
+        x = F.relu(x, inplace=True)
+        return x
+
+
+class OverlapPatchEmbed(nn.Module):
+    """ Image to Patch Embedding
+    """
+
+    def __init__(self, patch_size=7, stride=4, in_chans=3, embed_dim=768):
+        super().__init__()
+        patch_size = to_2tuple(patch_size)
+
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride,
+                              padding=(patch_size[0] // 2, patch_size[1] // 2))
+        self.norm = nn.BatchNorm2d(embed_dim)
+
+    def forward(self, x):
+        x = self.proj(x)
+        _, _, H, W = x.shape
+        x = self.norm(x)
+
+        x = x.flatten(2).transpose(1, 2)
+
+        return x, H, W
 
 
 class DropPath(nn.Module):
@@ -36,10 +72,10 @@ class DepthwiseConv(nn.Module):
         stride: 步长
     """
 
-    def __init__(self, in_channels, kernel_size=(3, 3), padding=(1, 1), stride=(1, 1), bias=False):
+    def __init__(self, in_channels, kernel_size=(3, 3), padding=(1, 1), stride=(1, 1), bias=True):
         super(DepthwiseConv, self).__init__()
 
-        self.conv = nn.Conv2d(
+        self.dwconv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=kernel_size,
@@ -50,7 +86,7 @@ class DepthwiseConv(nn.Module):
         )
 
     def forward(self, x):
-        out = self.conv(x)
+        out = self.dwconv(x)
         return out
 
 
@@ -294,23 +330,23 @@ class NMF2D(_MatrixDecomposition2DBase):
         return coef
 
 
-if __name__ == "__main__":
-    a = torch.ones(2, 3, 128, 128).to(device="cuda")
-    n = NMF2D(
-        json.dumps(
-            {
-                "SPATIAL": True,
-                "MD_S": 1,
-                "MD_D": 512,
-                "MD_R": 16,
-                "TRAIN_STEPS": 6,
-                "EVAL_STEPS": 7,
-                "INV_T": 1,
-                "ETA": 0.9,
-                "RAND_INIT": True,
-                "return_bases": False,
-                "device": "cuda"
-            }
-        )
-    )
-    print(n(a).shape)
+# if __name__ == "__main__":
+#     a = torch.ones(2, 3, 128, 128).to(device="cuda")
+#     n = NMF2D(
+#         json.dumps(
+#             {
+#                 "SPATIAL": True,
+#                 "MD_S": 1,
+#                 "MD_D": 512,
+#                 "MD_R": 16,
+#                 "TRAIN_STEPS": 6,
+#                 "EVAL_STEPS": 7,
+#                 "INV_T": 1,
+#                 "ETA": 0.9,
+#                 "RAND_INIT": True,
+#                 "return_bases": False,
+#                 "device": "cuda"
+#             }
+#         )
+#     )
+#     print(n(a).shape)

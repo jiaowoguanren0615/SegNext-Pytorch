@@ -98,3 +98,14 @@ def timer(func):
         print(f"Elapsed time: {elapsed_time * 1000:.2f}ms")
         return value
     return wrapper_timer
+
+
+def load_model(modelpath, model: nn.Module):
+    '''
+    A function to load model from a checkpoint, which is used
+    for fine-tuning on a different resolution.
+    '''
+    checkpoint = torch.load(modelpath, map_location='cpu')
+    if 'state_dict' in checkpoint.keys():
+        checkpoint = checkpoint['state_dict']
+    return checkpoint
